@@ -66,6 +66,7 @@ usrcode=""
 dnscode=""
 bstrapcode=""
 dhcpcode=""
+hpcfcode=""
 SPath=$RPath
 ifc=0
 iac=0
@@ -112,22 +113,6 @@ echo_log(){
 
 push_log(){
 	echo_log "$*" >> $Logfile
-}
-
-dnsmasq_rs(){
-	if [ "$1" == "1" ];then
-		echo_log "Dnsmasq restart."
-		/etc/init.d/dnsmasq restart >/dev/null 2>&1 &
-		return
-	fi
-
-	if [ -d $LPath ];then
-		echo_log "Dnsmasq Reload."
-		/etc/init.d/dnsmasq reload >/dev/null 2>&1
-	else
-		echo_log "Dnsmasq restart."
-		/etc/init.d/dnsmasq restart >/dev/null 2>&1
-	fi
 }
 
 rsc_dnsmasq(){
@@ -424,6 +409,10 @@ now_fcode(){
 	dhcpcode=$(file_idcode "/etc/config/dhcp")
 	echo "$dhcpcode"
 	;;
+	"hpcf")
+	hpcfcode=$(file_idcode "$helperconf")
+	echo "$hpcfcode"
+	;;
 	*)
 	echo ""
 	;;
@@ -432,7 +421,7 @@ now_fcode(){
 
 write_afcode(){
 	case $1 in
-		"config"|"ip"|"user"|"dns"|"bstrap"|"dhcp")
+		"config"|"ip"|"user"|"dns"|"bstrap"|"dhcp"|"hpcf")
 			mkdir -p $SPath
 			sed -i "/$1/d" $fcodeslist 2>/dev/null
 			echo "$1|$(now_fcode $1)" >> $fcodeslist
@@ -452,6 +441,7 @@ write_fcodes(){
 	write_afcode "dns"
 	write_afcode "bstrap"
 	write_afcode "dhcp"
+	write_afcode "hpcf"
 }
 
 get_fcode(){
@@ -474,5 +464,25 @@ test_fcode(){
 stop_httpsdp(){
 	if [ $(ps|grep "bin/https-dns-proxy"|grep -v "grep" |wc -l) -gt 0 ]; then
 		/etc/init.d/https-dns-proxy stop >/dev/null 2>&1
+	fi
+}
+
+dnsmasq_rs(){
+	if [ "$1" == "1" ];then
+		echo_log "Dnsmasq restart."
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1 &
+		return
+	fi
+
+	if [ $(test_fcode "hpcf") -eq 1 ];then
+		echo_log "Dnsmasq restart."
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
+		write_afcode "hpcf"
+	elif [ -d $LPath ];then
+		echo_log "Dnsmasq Reload."
+		/etc/init.d/dnsmasq reload >/dev/null 2>&1
+	else
+		echo_log "Dnsmasq restart."
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
 }
