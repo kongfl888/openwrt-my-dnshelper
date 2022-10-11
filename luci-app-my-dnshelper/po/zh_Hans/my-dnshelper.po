@@ -77,7 +77,7 @@ msgid "Keep rules to route"
 msgstr "保留规则到本机"
 
 msgid "Avoid downloading again after restart, but the reading speed will be affected when the number is large"
-msgstr "可避免重启后的重新下载，但这在规则数较多时可能会影响读取速率。默认不勾选"
+msgstr "可避免重启后的重新下载，但这在规则数较多时可能会影响读取速率。默认不勾选。空间需求。"
 
 msgid "Update interval"
 msgstr "更新间隔"
