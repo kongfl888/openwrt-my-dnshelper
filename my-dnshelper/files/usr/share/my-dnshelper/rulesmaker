@@ -932,8 +932,8 @@ maker_conf(){
 		uprule=-1
 		echo_log "Waiting network..."
 	fi
-	[ $upip -eq 1 ] && ip_conf && write_afcode "ip"
 	[ $updns -eq 1 ] && dns_conf  && write_afcode "dns" && write_afcode "bstrap"
+	[ $upip -eq 1 ] && ip_conf && write_afcode "ip"
 	[ $upusrrule -eq 1 ] && update_usrrule  && write_afcode "user"
 	echo_log "Helper Reload."
 	if [ $uprule -ne -1 ];then

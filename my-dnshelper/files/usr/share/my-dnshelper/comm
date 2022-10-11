@@ -195,6 +195,7 @@ clear_iprule(){
 add_iprule(){
 	local ipstok=1
 	local i=""
+	[ -d $SPath ] || mkdir -p $SPath
 	echo "" > $bgsconf
 	which ipset >/dev/null || ipstok=0
 	[ $ipstok -eq 1 ] && ipset create myipdrop hash:net 2>/dev/null
