@@ -114,15 +114,15 @@ check_wgetcurl(){
 clean_rules(){
 	[ -s ${1} ] || return
 	local fu_new=${1}
-	sed -i -e '/127.0.0.1 #/d' -e '/127.0.0.1 !/d' -e 's:#.*::' -e 's:!.*::' -e 's/\$important//g' -e 's/[ \t]*$//g' -e 's/^[ \t]*//g' -e '/\*/d' -e '/^$/d' $fu_new
-	sed -i -r -e 's/^::[1-9]?/0.0.0.0/' -e '/:/d' $fu_new
+	sed -i -e '/127\.0\.0\.1 #/d' -e '/127\.0\.0\.1 !/d' -e 's:#.*::' -e 's:!.*::' -e 's/\$important//g' -e 's/[ \t]*$//g' -e 's/^[ \t]*//g' -e '/\*/d' -e '/^$/d' $fu_new
+	sed -i -r -e 's/^::[1-9]?/0\.0\.0\.0/' -e '/:/d' $fu_new
 	sed -i "s/\r//g" $fu_new
 	sed -i -r -e "s/\t/ /g" -e "s/  / /g" $fu_new
 }
 
 clean_hosts(){
 	[ -s ${1} ] || return
-	sed -i -e '/\sip6-localhost/d' -e '/\sip6-loopback/d' -e '/\sip6-allnodes/d'  -e '/\sip6-allrouters/d' -e '/ 0.0.0.0/d' -e '/255.255.255.255/d' -e '/ local/d' ${1}
+	sed -i -e '/\sip6-localhost/d' -e '/\sip6-loopback/d' -e '/\sip6-allnodes/d'  -e '/\sip6-allrouters/d' -e '/ 0\.0\.0\.0/d' -e '/255\.255\.255\.255/d' -e '/ local/d' ${1}
 }
 
 get_domain_b()
@@ -448,7 +448,7 @@ downurl(){
 		clean_rules $fu_new
 		if grep -q "^address=" $fu_new;then
 			cat $fu_new >> $TPath/rules.conf
-		elif grep -q -e "^0.0.0.0 " -e "^127.0.0.1 " $fu_new;then
+		elif grep -q -e "^0\.0\.0\.0 " -e "^127\.0\.0\.1 " $fu_new;then
 			cat $fu_new >> $TPath/host
 		elif ! grep -q -e "|" -e "@" $fu_new;then
 			conv_domainc $fu_new $TPath/rules.conf
@@ -461,12 +461,13 @@ downurl(){
 	if [ -s $TPath/host ];then
 		clean_hosts $TPath/host
 		conv_hostsc $TPath/host $TPath/rules.conf
-		sed -i -e 's/127.0.0.1//g' -e 's/0.0.0.0//g' $TPath/rules.conf
+		sed -i -e 's/127\.0\.0\.1//g' -e 's/0\.0\.0\.0//g' $TPath/rules.conf
 	fi
-	[ -s $TPath/rules.conf ] && sed -i -e 's:/127.0.0.1$:/:' -e 's:/0.0.0.0$:/:' $TPath/rules.conf && sort_file $TPath/rules.conf
+	[ -s $TPath/rules.conf ] && sed -i -e 's:/127\.0\.0\.1$:/:' -e 's:/0\.0\.0\.0$:/:' $TPath/rules.conf && sort_file $TPath/rules.conf
 	[ -s $TPath/url ] && sort_file $TPath/url
 	if [ -s $TPath/rules.conf ];then
 		echo_log "Filter rules get successfully."
+		check_addrtopmain $TPath/rules.conf || echo_log "Found top domain in the Filter rules."
 		rm -f $TPath/host $SPath/failed
 		[ ! -d $SPath ] && mkdir -p $SPath
 		ifc=$(get_count $TPath/rules.conf)
@@ -545,6 +546,7 @@ downhosts(){
 	[ -s $TPath/hurl ] && sort_file $TPath/hurl
 	if [ -s $TPath/hosts.conf ];then
 		echo_log "Hosts list get successfully."
+		check_addrtopmain $TPath/hosts.conf || echo_log "Found top domain in the Hosts."
 		ihc=$(get_count $TPath/myhosts)
 		rm -f "$TPath/myhosts"
 		[ ! -d $SPath ] && mkdir -p $SPath
@@ -569,9 +571,9 @@ user_rules(){
 	get_domain $fu_new $TPath/user.conf
 	get_domain_w $fu_new $TPath/uwhite.txt
 	get_hosts $fu_new $TPath/uhosts.conf
-	[ -s $TPath/uhosts.conf ] && grep -E "^127.0.0.1|^0.0.0.0" $TPath/uhosts.conf > $TPath/uhosts
+	[ -s $TPath/uhosts.conf ] && grep -E "^127\.0\.0\.1|^0\.0\.0\.0" $TPath/uhosts.conf > $TPath/uhosts
 	if [ -s $TPath/uhosts.conf ]; then
-		sed -i -e '/127.0.0.1/d' -e '/0.0.0.0/d' $TPath/uhosts.conf
+		sed -i -e '/127\.0\.0\.1/d' -e '/0\.0\.0\.0/d' $TPath/uhosts.conf
 		get_domain_h $TPath/uhosts.conf $TPath/uwhite.txt
 		conv_hostsc $TPath/uhosts.conf
 	fi

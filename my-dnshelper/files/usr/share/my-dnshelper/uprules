@@ -5,10 +5,31 @@
 
 source /usr/share/my-dnshelper/comm
 
+nonet=0
+errc=0
 #debug
 EA=1
 
 [ "$EA" = "1" ] || exit 0
+[ $(ping_1p "baidu.com") -ne 0 ] && [ $(ping_1p "qq.com") -ne 0 ] && nonet=1
+
+if [ $nonet -eq 1 ];then
+	touch /tmp/hpruleupfail.log
+	errc=`grep -oE "\d+" /tmp/hpruleupfail.log | head -n 1 2>/dev/null`
+	[ -z "$errc" ] && errc=0
+	let errc++
+	echo $errc > /tmp/hpruleupfail.log
+	if [ $errc -gt 10 ];then
+		[ -d $RPath ] || mkdir -p $RPath
+		rm -f $updatelog
+		echo "`eval $D`" > $updatelog
+		push_log "FAILED to check update of rules."
+	fi
+	exit 1
+else
+	errc=0
+	[ -f /tmp/hpruleupfail.log ] && rm -f /tmp/hpruleupfail.log
+fi
 
 sSname="$(basename $0)"
 

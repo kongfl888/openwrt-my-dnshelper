@@ -67,6 +67,11 @@ dnscode=""
 bstrapcode=""
 dhcpcode=""
 hpcfcode=""
+rulescf=""
+rhostscf=""
+usrcf=""
+uhostscf=""
+bgscf=""
 SPath=$RPath
 ifc=0
 iac=0
@@ -113,21 +118,6 @@ echo_log(){
 
 push_log(){
 	echo_log "$*" >> $Logfile
-}
-
-rsc_dnsmasq(){
-	/etc/init.d/dnsmasq reload >/dev/null 2>&1
-	[ "$AT" = "1" ] || return 0
-	push_log "Checking DNS..."
-	sh /usr/share/my-dnshelper/testdns
-	local R=$?
-	if [ $R == 1 ];then
-		echo_log "DNS Check ERROR"
-		push_log "DNS Check ERROR. Please check your rules or your system."
-		rm -rf $LPath/*
-		/etc/init.d/dnsmasq restart >/dev/null 2>&1
-	fi
-	push_log "Checking DNS done."
 }
 
 sort_file(){
@@ -196,7 +186,7 @@ add_iprule(){
 	local ipstok=1
 	local i=""
 	[ -d $SPath ] || mkdir -p $SPath
-	echo "" > $bgsconf
+	echo -n > $bgsconf
 	which ipset >/dev/null || ipstok=0
 	[ $ipstok -eq 1 ] && ipset create myipdrop hash:net 2>/dev/null
 	for j in $(cat $EPath/ip.mdhp);do
@@ -414,6 +404,26 @@ now_fcode(){
 	hpcfcode=$(file_idcode "$helperconf")
 	echo "$hpcfcode"
 	;;
+	"rulescf")
+	rcfcode=$(file_idcode "$SPath/rules.conf")
+	echo "$rcfcode"
+	;;
+	"rhostscf")
+	hcfcode=$(file_idcode "$SPath/hosts.conf")
+	echo "$hcfcode"
+	;;
+	"usrcf")
+	ucfcode=$(file_idcode "$SPath/user.conf")
+	echo "$ucfcode"
+	;;
+	"uhostscf")
+	uhcfcode=$(file_idcode "$SPath/uhosts.conf")
+	echo "$uhcfcode"
+	;;
+	"bgscf")
+	bgsfcode=$(file_idcode "$bgsconf")
+	echo "$bgsfcode"
+	;;
 	*)
 	echo ""
 	;;
@@ -422,7 +432,7 @@ now_fcode(){
 
 write_afcode(){
 	case $1 in
-		"config"|"ip"|"user"|"dns"|"bstrap"|"dhcp"|"hpcf")
+		"config"|"ip"|"user"|"dns"|"bstrap"|"dhcp"|"hpcf"|"rulescf"|"rhostscf"|"usrcf"|"uhostscf"|"bgscf")
 			mkdir -p $SPath
 			sed -i "/$1/d" $fcodeslist 2>/dev/null
 			echo "$1|$(now_fcode $1)" >> $fcodeslist
@@ -434,6 +444,14 @@ write_afcode(){
 	esac
 }
 
+write_cafcode(){
+	write_afcode "rulescf"
+	write_afcode "rhostscf"
+	write_afcode "usrcf"
+	write_afcode "uhostscf"
+	write_afcode "bgscf"
+}
+
 write_fcodes(){
 	echo -n > $fcodeslist
 	write_afcode "config"
@@ -443,6 +461,7 @@ write_fcodes(){
 	write_afcode "bstrap"
 	write_afcode "dhcp"
 	write_afcode "hpcf"
+	write_cafcode
 }
 
 get_fcode(){
@@ -462,6 +481,14 @@ test_fcode(){
 	fi
 }
 
+test_spcnf(){
+	local tsc=0
+	test_fcode "rulescf" >/dev/null && test_fcode "rhostscf" >/dev/null && test_fcode "usrcf" >/dev/null || tsc=1
+	test_fcode "uhostscf" >/dev/null && test_fcode "bgscf" >/dev/null && [ $tsc -eq 0 ] || tsc=1
+	echo $tsc
+	return $tsc
+}
+
 stop_httpsdp(){
 	if [ $(ps|grep "bin/https-dns-proxy"|grep -v "grep" |wc -l) -gt 0 ]; then
 		/etc/init.d/https-dns-proxy stop >/dev/null 2>&1
@@ -469,9 +496,10 @@ stop_httpsdp(){
 }
 
 dnsmasq_rs(){
+	sleep 3s
 	if [ "$1" == "1" ];then
-		echo_log "Dnsmasq restart."
-		/etc/init.d/dnsmasq restart >/dev/null 2>&1 &
+		echo_log "Dnsmasq restart"
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 		return
 	fi
 
@@ -479,11 +507,41 @@ dnsmasq_rs(){
 		echo_log "Dnsmasq restart."
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 		write_afcode "hpcf"
+	elif [ $(test_spcnf) -eq 1 ];then
+		echo_log "Dnsmasq restart.."
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
+		write_cafcode
 	elif [ -d $LPath ];then
 		echo_log "Dnsmasq Reload."
 		/etc/init.d/dnsmasq reload >/dev/null 2>&1
 	else
-		echo_log "Dnsmasq restart."
+		echo_log "Dnsmasq restart..."
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
+}
+
+rsc_dnsmasq(){
+	dnsmasq_rs
+	[ "$AT" = "1" ] || return 0
+	push_log "Checking DNS..."
+	sh /usr/share/my-dnshelper/testdns
+	local R=$?
+	if [ $R == 1 ];then
+		echo_log "DNS Check ERROR"
+		push_log "DNS Check ERROR. Please check your rules or your system."
+		rm -rf $LPath/*
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
+	fi
+	push_log "Checking DNS done."
+}
+
+check_addrtopmain(){
+	[ -n "$1" ] || return
+	[ -s $1 ] || return
+	local hr=0
+	grep -E "^\.[a-zA-Z]{2,6}\s*$" $1 && hr=1
+	grep -E "^(127|0)\.0\.0\.(0|1)\s+\.[a-zA-Z]{2,6}\s*$" $1 && hr=1
+	grep -E "^address=\/\.[a-zA-Z]{2,6}\/" $1 && hr=1
+
+	return $hr
 }
