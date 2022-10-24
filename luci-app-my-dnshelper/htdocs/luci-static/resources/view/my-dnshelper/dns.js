@@ -18,7 +18,7 @@ return view.extend({
 		csize = uci.get("dhcp","@dnsmasq[0]","cachesize");
 		csize = csize?csize:'150';
 
-		if (stats[0] && stats[0].code === 0) {
+		if (stats[0] && stats[0].code == 0) {
 			v = stats[0].stdout.trim();
 		}
 

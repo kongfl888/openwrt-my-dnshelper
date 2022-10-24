@@ -57,16 +57,18 @@ function helperRenderStatus(res) {
 	var p="";
 	var dnso="";
 	try {
-		if (res[2] && res[2].code === 0){
-			if ( res[2].stdout.trim() != "0" )
-			{
+		if (res[2]){
+			if (res[2].code == 0 && res[2].stdout.trim() == "0" ){
+				isDnsOK = true;
+			}
+			else{
 				isDnsOK = false;
 			}
 		}
-		if (res[3] && res[3].code === 0){
+		if (res[3] && res[3].code == 0){
 			p = res[3].stdout.trim();
 		}
-		if (res[4] && res[4].code === 0){
+		if (res[4] && res[4].code == 0){
 			dnso = res[4].stdout.trim();
 		}
 
@@ -104,7 +106,7 @@ return view.extend({
 		var m, s, o, v;
 		v = '';
 		
-		if (stats[0] && stats[0].code === 0) {
+		if (stats[0] && stats[0].code == 0) {
 			v = stats[0].stdout.trim();
 		}
 		
