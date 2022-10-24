@@ -13,6 +13,8 @@ get_cfg_value(){
 	echo "$v"
 }
 
+DEBUG=0
+[ -f /usr/share/my-dnshelper/debug ] && DEBUG=1
 LOCK="/var/lock/my-dnshelper.lock"
 SF=$(cd "$(dirname "$0")";pwd)
 EA=`get_cfg_value "enable" "0"`
@@ -28,7 +30,7 @@ bio=`get_cfg_value "block_ios"`
 bga=`get_cfg_value "block_games"`
 bsh=`get_cfg_value "block_short"`
 bgg=`get_cfg_value "block_google"`
-UDH=`get_cfg_value "use_doh"`
+UDH=`get_cfg_value "use_doh" "0"`
 dcache=`get_cfg_value "dns_cache"`
 hport=`get_cfg_value "doh_port"`
 dnssec=`get_cfg_value "use_sec"`
@@ -46,6 +48,8 @@ revlog=`get_cfg_value "rev_log"`
 dnsdetect=`get_cfg_value "dns_detect"`
 dnscheck=`get_cfg_value "dns_check"`
 FWI=$(uci -q get firewall.my_dnshelper.path 2>/dev/null)
+DDOMAIN=$(uci -q get dhcp.@dnsmasq[0].domain)
+localuse=$(uci -q get dhcp.@dnsmasq[0].localuse)
 sharedir="/usr/share/my-dnshelper"
 Logfile="/tmp/my-dnshelper.log"
 D="date +'%Y-%m-%d %H:%M:%S'"
@@ -79,6 +83,7 @@ ihc=0
 
 [ "$S" == "1" ] && SPath=$EPath/Rules
 [ -z "$FWI" ] && FWI="/var/etc/my-dnshelper.include"
+[ -z "$DDOMAIN" ] && DDOMAIN="lan"
 
 if [ -n "$dnslogpath" ]; then
 	if [ "$dnsmasqlog" != "$dnslogpath" ];then
@@ -175,8 +180,9 @@ EOF
 }
 
 clear_iprule(){
-	iptables -D FORWARD -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP 2>/dev/null
-	iptables -D OUTPUT -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP 2>/dev/null
+	sleep 1s
+	iptables -w 2 -D FORWARD -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP 2>/dev/null
+	iptables -w 2 -D OUTPUT -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP 2>/dev/null
 	which ipset >/dev/null && ipset destroy myipdrop 2>/dev/null
 	rm -f $bgsconf
 	init_fwi
@@ -197,8 +203,8 @@ add_iprule(){
 			echo "bogus-nxdomain=$i" >> $bgsconf
 		fi
 	done
-	iptables -I FORWARD -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP
-	iptables -I OUTPUT -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP
+	iptables -w -I FORWARD -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP
+	iptables -w -I OUTPUT -m set --match-set myipdrop dst -m comment --comment "$TAG" -j DROP
 	get_include
 }
 
@@ -322,7 +328,7 @@ clear_doh(){
 		uci -q delete https-dns-proxy.@https-dns-proxy[-1] 2>/dev/null
 		[ $? -ne 0 ] && break
 	done
-	uci -q delete https-dns-proxy.config.force_dns >/dev/null 2>&1
+	uci -q set https-dns-proxy.config.force_dns='0'
 	uci commit https-dns-proxy
 }
 
@@ -492,11 +498,14 @@ test_spcnf(){
 stop_httpsdp(){
 	if [ $(ps|grep "bin/https-dns-proxy"|grep -v "grep" |wc -l) -gt 0 ]; then
 		/etc/init.d/https-dns-proxy stop >/dev/null 2>&1
+		sleep 2s
 	fi
 }
 
 dnsmasq_rs(){
-	sleep 3s
+	sleep 2s
+	[ "$localuse" == "1" ] || uci -q set dhcp.@dnsmasq[0].localuse="1" && uci commit dhcp
+	sleep 1s
 	if [ "$1" == "1" ];then
 		echo_log "Dnsmasq restart"
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
@@ -521,6 +530,7 @@ dnsmasq_rs(){
 }
 
 rsc_dnsmasq(){
+	local svyes=0
 	dnsmasq_rs
 	[ "$AT" = "1" ] || return 0
 	push_log "Checking DNS..."
@@ -529,10 +539,28 @@ rsc_dnsmasq(){
 	if [ $R == 1 ];then
 		echo_log "DNS Check ERROR"
 		push_log "DNS Check ERROR. Please check your rules or your system."
+		[ -f $LPath/01.hpsv.conf ] && svyes=1
 		rm -rf $LPath/*
+		[ $svyes -eq 1 -a -s $hpsvconf ] && ln -sf $hpsvconf $LPath/01.hpsv.conf
 		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
 	push_log "Checking DNS done."
+}
+
+check_dnsmasq(){
+	local dtest=0
+	local psget=0
+	local dg127=0
+	dtest=`dnsmasq --test 2>&1|grep -E "[Oo][kK]"|wc -l`
+	pgrep dnsmasq >/dev/null && psget=1
+	dg127=`netstat -nutlp | grep "dnsmasq"|grep "127.0.0.1"|wc -l`
+	if [ $dtest -gt 0 -a $psget -gt 0 -a $dg127 -gt 0 ];then
+		echo 0
+		return 0
+	else
+		echo 1
+		return 1
+	fi
 }
 
 check_addrtopmain(){
@@ -544,4 +572,9 @@ check_addrtopmain(){
 	grep -E "^address=\/\.[a-zA-Z]{2,6}\/" $1 && hr=1
 
 	return $hr
+}
+
+debug_log(){
+	[ -n "$1" ] || return
+	[ $DEBUG -eq 1 ] && push_log "[D]$1"
 }

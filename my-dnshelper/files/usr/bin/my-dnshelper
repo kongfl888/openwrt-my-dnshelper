@@ -56,6 +56,7 @@ upruler="$sharedir/uprules"
 guard=0
 bootn=1
 errnet=0
+lnfix=0
 
 [ "$S" = "1" ] && SPath=$EPath/Rules
 
@@ -77,7 +78,11 @@ clear_log(){
 	[ -s $1 ] || return
 	[ -z "$2" ] || ss=$2
 	local dlogsize=0
-	local ssize=$(($ss * 1048576))
+	local ssize=1048576
+	local sss=$ss
+	local sst=1
+	echo ${sss} | grep -q "\." && sst=10 && ss=`echo ${sss}|cut -d '.' -f2|grep -oE '\d'|head -n1`
+	ssize=$(($ss * 1048576 / $sst))
 	[ -s $1 ] && dlogsize=`ls -l $1 | awk '{ print $5 }'`
 	if [ $dlogsize -gt $ssize ]; then
 			echo_log "Initialize log. Log size is set to ${ss} MB." > $1
@@ -86,8 +91,11 @@ clear_log(){
 
 boot_fix(){
 	local bmin=0
-	[ -f $updatelog ] && bootn=0 && return
+	local bday=0
 	[ $bootn -eq 0 ] && return
+	[ -f $updatelog ] && bootn=0 && return
+	bday=`uptime | grep -co "day"`
+	[ $bday -gt 0 ] && bootn=0 && return
 	if [ $(uptime | grep -oE "[0-9]+\s*min" 2>/dev/null|wc -l) -eq 1 ];then
 		bmin=`uptime | grep -oE "[0-9]+\s*min"|grep -oE "[0-9]+"`
 		[ -n "$bmin" ] || bmin=0
@@ -95,6 +103,7 @@ boot_fix(){
 			bootn=0
 		else
 			bootn=1
+			debug_log "boot waiting."
 			[ $(ping_1p "baidu.com") -eq 0 ] && $upruler
 		fi
 	fi
@@ -113,25 +122,45 @@ GuardA(){
 		[ -f "$helperconf" ] || $rmaker >> $Logfile
 	fi
 	if [ "$UDH" == "1" ];then
-		[ -n "$(get_ports_ps)" -a ! -s "$dohconf" ] &&  $rmaker -d >> $Logfile && sleep 1s
+		[ -n "$(get_ports_ps)" -a ! -s "$dohconf" ] &&  $rmaker -d >> $Logfile && sleep 1s && debug_log "start because doh config is none."
 		[ -z "$(get_ports_ps)" ] && sleep 3s
-		[ -z "$(get_ports_ps)" -a -n "$(get_ports_cfg)" -a -s "$dohconf" ] &&  $rmaker -d >> $Logfile && sleep 1s
+		[ -z "$(get_ports_ps)" -a -n "$(get_ports_cfg)" -a -s "$dohconf" ] &&  $rmaker -d >> $Logfile && sleep 1s && debug_log "start because ps doh is none."
 	fi
 	[ -f $resolvconf ] || touch $resolvconf
-	[ -s $resolvconf -a "$UDH" == "0" -a "$(get_rautoc)" != "$resolvconf" ] && $rmaker -d >> $Logfile && sleep 1s
-	[ -h /tmp/resolv.conf -a -s $resolvconf ] && cp -f $resolvconf /tmp/resolv.conf 2>/dev/null
+	[ -s $resolvconf -a "$UDH" == "0" -a "$(get_rautoc)" != "$resolvconf" ] && $rmaker -d >> $Logfile && sleep 1s && debug_log "start because resolv not be set."
+	if [ -h /tmp/resolv.conf ];then
+		debug_log "Helper - dnsmasq may failed."
+		[ $lnfix -eq 0 ] && sleep 3s && dnsmasq_rs 1 >> $Logfile
+		sleep 2s
+		if [ -h /tmp/resolv.conf ];then
+			if [ $(check_dnsmasq) -eq 0 ];then
+				rm -f /tmp/resolv.conf
+				echo "search $DDOMAIN" > /tmp/resolv.conf
+				echo "nameserver 127.0.0.1" >> /tmp/resolv.conf
+				if [ -s $resolvconf ];then
+					grep -q ":" $resolvconf && echo echo "nameserver ::1" >> /tmp/resolv.conf
+				elif [ "$forceip46" != "1"  ];then
+					echo echo "nameserver ::1" >> /tmp/resolv.conf
+				fi
+			fi
+			let lnfix++
+		else
+			lnfix=0
+		fi
+		[ $lnfix -gt 60 ] && lnfix=0
+	fi
 	if [ "$dnscheck" == "1" -a $(ping_1p "114.114.114.114") -eq 0 -a $(ping_1p "baidu.com") -ne 0 ];then
 		push_log "Helper - checking network."
 		push_log "[Error]DNS may have some problems. Something were wrong."
 		push_log "Please restart my-dnshelper, or check other app, or check your network."
 		let errnet++
-		[ "$UDH" == "1" -a $errnet -eq 10 ] && $rmaker -d >> $Logfile && sleep 1s
+		[ "$UDH" == "1" -a $errnet -eq 10 ] && $rmaker -d >> $Logfile && sleep 1s && debug_log "start to fix dns."
 	else
 		errnet=0
 	fi
-	[ "$(check_ln)" == "1" ] && $rmaker >> $Logfile && sleep 1s
+	[ "$(check_ln)" == "1" ] && $rmaker >> $Logfile && sleep 1s && debug_log "start because LNs missed."
 	boot_fix
-	if [ "$AUD" == "1" ]; then
+	if [ "$AUD" == "1" -a $bootn -eq 0 ]; then
 		oldt=$(date -d "`cat $updatelog 2>/dev/null`" +%s 2>/dev/null)
 		nowt=$(date +%s)
 		[ -z "$oldt" ] && oldt=$nowt
@@ -141,19 +170,24 @@ GuardA(){
 		[ $ctime -gt $utime ] && $upruler && sleep 1s
 	fi
 	if [ $(test_fcode "config") -eq 1 ];then
+		debug_log "config changed"
 		$rmaker >> $Logfile && sleep 1s
 		write_fcodes
 	fi
 	if [ $(test_fcode "ip") -eq 1 ];then
+		debug_log "ip rules changed"
 		$rmaker -i >> $Logfile && sleep 1s
 	fi
 	if [ $(test_fcode "user") -eq 1 ];then
+		debug_log "user rules changed"
 		$rmaker "--usr" >> $Logfile && sleep 1s
 	fi
 	if [ $(test_fcode "dns") -eq 1 ];then
+		debug_log "dns changed"
 		$rmaker -d >> $Logfile && sleep 1s
 	fi
 	if [ $(test_fcode "bstrap") -eq 1 ];then
+		debug_log "bstrap changed"
 		$rmaker -d >> $Logfile && sleep 1s
 	fi
 }
@@ -164,6 +198,7 @@ if [ "$S" != "1" ]; then
 fi
 
 [ -d $LPath ] || sleep ${delay}s
+debug_log "first start"
 $rmaker >> $Logfile
 
 write_fcodes
@@ -177,5 +212,5 @@ while true; do
 	sleep 30s
 	GuardA
 	clear_log "$dnsmasqlog" "$dnslogsize"
-	clear_log "$Logfile" "1"
+	clear_log "$Logfile" "0.5"
 done

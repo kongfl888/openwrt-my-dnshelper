@@ -70,6 +70,6 @@ fi
 
 push_log "Reload Rules"
 
-rsc_dnsmasq
+rsc_dnsmasq | grep -vE "^(0|1)$" >> $Logfile
 
 exit 0

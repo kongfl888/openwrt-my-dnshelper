@@ -13,7 +13,6 @@ get_config()
 
 service_triggers() {
 	procd_add_reload_trigger "$NAME"
-	procd_add_reload_interface_trigger wan
 }
 
 start_service()

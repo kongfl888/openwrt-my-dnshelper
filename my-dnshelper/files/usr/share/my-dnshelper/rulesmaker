@@ -99,8 +99,11 @@ if [ $(pgrep -f ${sSname}|wc -l) -gt 2 ];then
 		exit 1
 	fi
 fi
+which dnsmasq >/dev/null || (uci -q set my-dnshelper.@my-dnshelper[0].enable='1' && uci commit my-dnshelper && /etc/init.d/my-dnshelper stop && exit 1)
 [ -f $DPath ] && rm -f $DPath
 [ ! -d $DPath ] && mkdir -p $DPath
+
+which https-dns-proxy >/dev/null 2>&1 && dht=1
 
 check_wgetcurl(){
 	which curl >/dev/null && downloader="curl --retry 3 --connect-timeout 20 -m 80 -kLfso" && return
@@ -134,18 +137,18 @@ get_domain_b()
 get_domain_w()
 {
 	[ -s ${1} ] || return
-	cat ${1} | grep -E "^\@\@\|\|.*\^\s*$" | grep -oE "[0-9a-zA-Z][0-9a-zA-Z\-]+\.\S*[0-9a-zA-Z]+" >> ${2}
+	cat ${1} | grep -E "^\@\@\|\|.*\^\s*$" | grep -oE "[0-9a-zA-Z][0-9a-zA-Z\-]*\.\S*[0-9a-zA-Z]+" >> ${2}
 }
 
 get_domain_h()
 {
 	[ -s ${1} ] || return
-	cat ${1} | grep -E "^[0-9]+(\.[0-9]+){3}\s+" | grep -oE "[0-9a-zA-Z][0-9a-zA-Z\-]+\.\S*[0-9a-zA-Z]+" >> ${2}
+	cat ${1} | grep -E "^[0-9]+(\.[0-9]+){3}\s+" | grep -oE "[0-9a-zA-Z][0-9a-zA-Z\-]*\.\S*[0-9a-zA-Z]+" >> ${2}
 }
 
 get_domain(){
 	[ -s ${1} ] || return
-	cat ${1} | grep -oE "^[0-1a-zA-Z][0-1a-zA-Z\-]+(\.[0-9a-zA-Z\-]+)+$" >> ${2}
+	cat ${1} | grep -oE "^[0-9a-zA-Z][0-9a-zA-Z\-]*(\.[0-9a-zA-Z\-]+)+$" >> ${2}
 }
 
 get_hosts(){
@@ -618,7 +621,7 @@ user_do53(){
 	else
 		iport=0
 		conv_ipdnsc $fu_new $resolvconf
-		sed -i '/^$/d' $resolvconf
+		sed -i -r '/^\s*$/d' $resolvconf
 	fi
 	if [ -s $fu_new ]; then
 		echo_log "Custom DNS is set."
@@ -654,16 +657,19 @@ user_doh(){
 	[ -z $str_6b ] && str_6b="2400:3200::1,2400:3200:baba::1"
 	(/etc/init.d/https-dns-proxy enabled && /etc/init.d/https-dns-proxy disable >/dev/null 2>&1) &
 	stop_httpsdp
+	clear_doh
 	uci -q set https-dns-proxy.config.update_dnsmasq_config='-'
+	uci -q set https-dns-proxy.config.wan6_trigger='0'
+	uci -q set https-dns-proxy.config.canary_domains_icloud='0'
+	uci -q set https-dns-proxy.config.canary_domains_mozilla='0'
+	uci -q delete https-dns-proxy.config.force_dns_port
 	if [ "$forcedoh" == "1" ]; then
 		uci -q set https-dns-proxy.config.force_dns='1'
 		uci -q add_list https-dns-proxy.config.force_dns_port="853"
 	else
-		uci -q delete https-dns-proxy.config.force_dns
-		uci -q del_list https-dns-proxy.config.force_dns_port="53"
+		uci -q set https-dns-proxy.config.force_dns='0'
 	fi
 	uci commit https-dns-proxy >/dev/null
-	clear_doh
 	for i in $(cat $fu_new); do
 		[ -z "$i" ] && continue
 		hport=$(int_port $hport)
@@ -720,7 +726,6 @@ dns_conf(){
 	[ -s $resolvconf ] && uci -q delete dhcp.@dnsmasq[0].noresolv
 	mkdir -p $TPath
 	get_https $u_cr $f_new
-	which https-dns-proxy >/dev/null 2>&1 && dht=1
 	[ -s $f_new ] || dht=0
 	if [ "$UDH" == "1" -a $dht -eq 1 ]; then
 		user_doh
@@ -747,6 +752,7 @@ dns_conf(){
 
 	if [ -n "$dcache" ]; then
 		uci set dhcp.@dnsmasq[0].cachesize=$dcache
+		grep -q "ednspacket_max" /etc/config/dhcp || uci -q set dhcp.@dnsmasq[0].ednspacket_max='1232'
 		dhcpe=1
 	fi
 	if [ "$usemul" == "1" ];then
@@ -801,7 +807,7 @@ creat_hpconf(){
 		echo "addn-hosts=$SPath/uhosts" >> $helperconf
 	fi
 	if [ -s $resolvconf ]; then
-		if [ $dht -eq 1 -a "$forcedoh" == "1" ];then
+		if [ $dht -eq 1 -a "$forcedoh" == "1" -a "$UDH" == "1" ];then
 			sed -i "/resolv-file=/d" $helperconf
 			uci -q delete dhcp.@dnsmasq[0].resolvfile
 			uci commit dhcp
@@ -848,7 +854,11 @@ creat_hpconf(){
 	if [ -n "$dcache" ];then
 		if [ $dcache -gt 1000 ];then
 			grep -q "min-cache-ttl" "$(get_dnsmasqcfg)" 2>/dev/null && mincset=1
-			[ $mincset -eq 0 ] && echo "min-cache-ttl=3600" >> $helperconf
+			if [ $dcache -gt 2000 ];then
+				[ $mincset -eq 0 ] && echo "min-cache-ttl=3600" >> $helperconf
+			else
+				[ $mincset -eq 0 ] && echo "min-cache-ttl=1800" >> $helperconf
+			fi
 		fi
 	fi
 }
@@ -937,6 +947,7 @@ maker_conf(){
 	[ $updns -eq 1 ] && dns_conf  && write_afcode "dns" && write_afcode "bstrap"
 	[ $upip -eq 1 ] && ip_conf && write_afcode "ip"
 	[ $upusrrule -eq 1 ] && update_usrrule  && write_afcode "user"
+	[ -n "$(get_ports_cfg)" ] || dht=0
 	echo_log "Helper Reload."
 	if [ $uprule -ne -1 ];then
 		lnk_conf
@@ -990,12 +1001,15 @@ else
 	dnsmasq_rs
 fi
 
+[ $Job -eq 0 ] && stop_httpsdp
+[ $Job -eq 0 ] && exit 0
+
 if [ "$UDH" == "1" -a $dht -eq 1 ];then
 	sleep 6s
 	/etc/init.d/https-dns-proxy restart >/dev/null 2>&1 &
 elif [ -s $dohconf -a "$EA" == "0" ];then
 	stop_httpsdp
-elif [ "$EA" == "1" ];then
+elif [ "$EA" == "1" -a "$UDH" != "1" ];then
 	stop_httpsdp
 fi
 
