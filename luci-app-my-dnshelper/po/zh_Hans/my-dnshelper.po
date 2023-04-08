@@ -94,6 +94,9 @@ msgstr "请等待后台更新完成。"
 msgid "Rules Data"
 msgstr "规则数据库"
 
+msgid "Check app version"
+msgstr "版本检测"
+
 msgid "Show dns detect"
 msgstr "显示DNS探测"
 

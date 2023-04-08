@@ -6,12 +6,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-my-dnshelper
-PKG_VERSION:=1.0
-PKG_RELEASE:=1
+PKG_VERSION:=1.1
 
 PKG_LICENSE:=GPLv2
 LUCI_URL:=https://github.com/kongfl888/openwrt-my-dnshelper
-LUCI_TITLE:=LuCI App for my-dnshelper which is your helper of setting dns server of your openwrt.
+LUCI_TITLE:=LuCI App for my-dnshelper.
+LUCI_DESCRIPTION:=LuCI App for my-dnshelper which is your helper of setting dns server of your openwrt.
 LUCI_MAINTAINER:=K
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:=+my-dnshelper

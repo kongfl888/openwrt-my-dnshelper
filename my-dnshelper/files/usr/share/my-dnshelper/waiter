@@ -118,12 +118,23 @@ get_ports_ip(){
 	echo $a
 }
 
+get_appver(){
+	local dmqver="Dnsmasq `dnsmasq --version | grep -oE 'v.*\d+(\.\d+)+'| grep -oE '\d+(\.\d+)*'`"
+	local appvr=""
+	[ "$app_check" == "1" ] && appvr=`sh /usr/share/my-dnshelper/checkver`
+	if [ -z "$appvr" ];then
+		echo $dmqver
+	else
+		echo "$dmqver | $appvr"
+	fi
+}
+
 case $Pa in
 	"--help")
 	Helpthis
 	;;
 	"-m"|"--dnsmasq")
-	echo "Dnsmasq `dnsmasq --version | grep -oE 'v.*\d+(\.\d+)+'| grep -oE '\d+(\.\d+)*'`"
+	get_appver
 	;;
 	"-d"|"--doh")
 	hv=`opkg list-installed https-dns-proxy 2>/dev/null`

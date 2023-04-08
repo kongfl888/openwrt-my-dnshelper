@@ -105,15 +105,6 @@ which dnsmasq >/dev/null || (uci -q set my-dnshelper.@my-dnshelper[0].enable='1'
 
 which https-dns-proxy >/dev/null 2>&1 && dht=1
 
-check_wgetcurl(){
-	which curl >/dev/null && downloader="curl --retry 3 --connect-timeout 20 -m 80 -kLfso" && return
-	which wget-ssl >/dev/null && downloader="wget-ssl --no-check-certificate -t 3 -T 20 -q -O" && return
-	[ -z "$1" ] && opkg update || (echo error opkg && exit 1)
-	[ -z "$1" ] && (opkg remove wget wget-nossl --force-depends &&  opkg install wget-ssl ; check_wgetcurl 1 ; return)
-	[ "$1" == "1" ] && (opkg install curl ; check_wgetcurl 2 ; return)
-	echo error curl and wget && exit 1
-}
-
 clean_rules(){
 	[ -s ${1} ] || return
 	local fu_new=${1}
@@ -360,6 +351,7 @@ fu_short(){
 
 	cat <<-EOF >> ${1}
 address=/amemv.com/
+address=/alllook.tv/
 address=/baijiahao.baidu.com/
 address=/bytedance.com/
 address=/bytednsdoc.com/
@@ -397,6 +389,27 @@ address=/youliao.xunlei.com/
 address=/yximgs.com/
 address=/yy.com/
 address=/zijieapi.com/
+address=/awemeughun.com/
+address=/bytegecko.com/
+address=/bytedns1.com/
+address=/bytefcdn.com/
+address=/huoshanlive.com/
+address=/ihuoshanlive.com/
+address=/volcfcdndvs.com/
+address=/volcsiriusbd.com/
+address=/onethingpcs.com/
+address=/douyinstatic.com/
+address=/v.bsgslb.com/
+address=/ndcpp.com/
+address=/ndcpp.com.bsgslb.com/
+address=/kuiniuca.com/
+address=/d2-toutiao-ipv6-ml.gslb.ksyuncdn.com/
+address=/xycdn.com/
+address=/cdngslb.com/
+address=/whoami.akamai.net/
+address=/dm-hl.toutiao.com/
+address=/zlink.toutiao.com/
+address=/monsetting.toutiao.com/
 EOF
 
 }
@@ -658,8 +671,8 @@ user_doh(){
 	(/etc/init.d/https-dns-proxy enabled && /etc/init.d/https-dns-proxy disable >/dev/null 2>&1) &
 	stop_httpsdp
 	clear_doh
-	uci -q set https-dns-proxy.config.update_dnsmasq_config='-'
-	uci -q set https-dns-proxy.config.wan6_trigger='0'
+	uci -q set https-dns-proxy.config.dnsmasq_config_update='-'
+	uci -q set https-dns-proxy.config.procd_trigger_wan6='0'
 	uci -q set https-dns-proxy.config.canary_domains_icloud='0'
 	uci -q set https-dns-proxy.config.canary_domains_mozilla='0'
 	uci -q delete https-dns-proxy.config.force_dns_port
@@ -985,13 +998,20 @@ stopthis(){
 	[ $cdhcp -eq 1 ] && uci commit dhcp
 }
 
+if [ -f /etc/init.d/https-dns-proxy ];then
+	(/etc/init.d/https-dns-proxy enabled && /etc/init.d/https-dns-proxy disable >/dev/null 2>&1) &
+	if [ "$UDH" == "1" -a -s /usr/share/my-dnshelper/https-dns-proxy.init ]; then
+		httpsdpfcode=$(file_idcode "/etc/init.d/https-dns-proxy")
+		myhpsdpfcode=$(file_idcode "/usr/share/my-dnshelper/https-dns-proxy.init")
+		[ "$httpsdpfcode" == "$myhpsdpfcode" ] || (cp -f /usr/share/my-dnshelper/https-dns-proxy.init /etc/init.d/https-dns-proxy && chmod 0774 /etc/init.d/https-dns-proxy)
+	fi
+fi
+
 if [ $Job -eq 0 ];then
 	stopthis
 else
 	maker_conf
 fi
-
-(/etc/init.d/https-dns-proxy enabled && /etc/init.d/https-dns-proxy disable >/dev/null 2>&1) &
 
 if [ $Job -eq 4 -o $Job -eq 5 ]; then
 	dnsmasq_rs 1

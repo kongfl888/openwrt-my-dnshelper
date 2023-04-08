@@ -47,6 +47,7 @@ dnslogpath=`get_cfg_value "dnslog_path"`
 revlog=`get_cfg_value "rev_log"`
 dnsdetect=`get_cfg_value "dns_detect"`
 dnscheck=`get_cfg_value "dns_check"`
+app_check=`get_cfg_value "app_check"`
 FWI=$(uci -q get firewall.my_dnshelper.path 2>/dev/null)
 DDOMAIN=$(uci -q get dhcp.@dnsmasq[0].domain)
 localuse=$(uci -q get dhcp.@dnsmasq[0].localuse)
@@ -471,8 +472,8 @@ write_fcodes(){
 }
 
 get_fcode(){
-	[ -f $fcodeslist ] || echo ""
-	grep "$1" $fcodeslist | cut -d '|' -f2
+	[ -f $fcodeslist ] || (echo "" && return 0)
+	grep "$1" $fcodeslist 2>/dev/null | cut -d '|' -f2
 }
 
 test_fcode(){
@@ -572,6 +573,15 @@ check_addrtopmain(){
 	grep -E "^address=\/\.[a-zA-Z]{2,6}\/" $1 && hr=1
 
 	return $hr
+}
+
+check_wgetcurl(){
+	which curl >/dev/null && downloader="curl --retry 3 --connect-timeout 20 -m 80 -kLfso" && return
+	which wget-ssl >/dev/null && downloader="wget-ssl --no-check-certificate -t 3 -T 20 -q -O" && return
+	[ -z "$1" ] && opkg update || (echo error opkg && exit 1)
+	[ -z "$1" ] && (opkg remove wget wget-nossl --force-depends &&  opkg install wget-ssl ; check_wgetcurl 1 ; return)
+	[ "$1" == "1" ] && (opkg install curl ; check_wgetcurl 2 ; return)
+	echo error curl and wget && exit 1
 }
 
 debug_log(){

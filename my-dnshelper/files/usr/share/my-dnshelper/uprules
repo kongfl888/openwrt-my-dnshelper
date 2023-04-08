@@ -53,6 +53,8 @@ echo "0" > $updatelog
 
 sh /usr/share/my-dnshelper/rulesmaker -u >> $Logfile 2>/dev/null
 
+sh /usr/share/my-dnshelper/checkver -f 2>/dev/null
+
 udt2=`cat $updatelog 2>/dev/null`
 
 udx1=`date -d "$udt1" +%s 2>/dev/null`

@@ -202,6 +202,10 @@ return view.extend({
 		o.depends("autoupdate","1")
 		o.default = 12;
 
+		o = s.option(form.Flag, "app_check", _("Check app version"));
+		o.rmempty = false;
+		o.default = 'false';
+
 		o = s.option(form.Flag, "dns_detect", _("Show dns detect"));
 		o.rmempty = false;
 		o.default = 'false';
